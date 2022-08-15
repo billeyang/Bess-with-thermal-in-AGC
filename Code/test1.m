@@ -1,17 +1,18 @@
 %huodian_data = xlsread("火储典型.xlsx");
 clc;
 clear all;
-AGC_ask = xlsread("火储典型2.xlsx",'E2:E601'); %读取AGC曲线
-POWER_OUT = xlsread("火储典型2.xlsx",'G2:G601');%读取火电出力曲线
+AGC_ask = xlsread("火储典型.xlsx",'N2:N601'); %读取AGC曲线
+%POWER_REF = xlsread("火储典型2-t.xlsx",'G2:G601');%读取火电出力曲线
+POWER_OUT = xlsread("火储典型.xlsx",'O2:O601');%读取火电前移t时刻出力曲线，主要是因为火电实际反应要比AGC指令慢，因此按照t时刻前移对应火电出力
 x = AGC_ask - POWER_OUT; %计算AGC和火电出力差值
 ess = zeros(600,1); %建立储能荷电状态参数，起始值为0
 %total_charge = zeros(600,1);
 %total_discharge = zeros(600,1);
  
-power_constraint = 18;%储能功率18MW
-energy_capacity = 9; %储能能量
-charge_ratio = 0.9;%充电深度0.1
-discharge_ratio = 0.1;%放电深度0.9
+power_constraint = 36;%储能功率36MW
+energy_capacity = 18; %储能能量18
+charge_ratio = 0.9;%充电深度0.9
+discharge_ratio = 0.1;%放电深度0.1
 %energy_constraint = 7.2;
 energy_constraint = energy_capacity *(charge_ratio-discharge_ratio);%实际储能能量
 time_period = 0.04; % 2min24s/60min = 144s/3600s = 0.04
@@ -33,10 +34,10 @@ for i = 1 : 600 %该电厂一天调用次数为600
         end
     %% 放电-AGC与出力差值大于储能功率
     elseif x(i) >= power_constraint
-        if ess(i) >  power_constraint * time_period%当电池储存的能量大于PCS功率*时间需要的能量时，放出功率*时间的能量
+        if ess(i) >  power_constraint * time_period%当电池储存的能量大于PCS功率*时间需要的能量时，放出功率*t时间的能量
             ess(i+1) = ess(i) - power_constraint * time_period;
             %total_discharge(i+1) = total_discharge(i) + power_constraint * time_period;
-        elseif ess(i) >0 && ess(i)< (power_constraint * time_period)%当电池储存的能量小于PCS功率*时间需要的能量时，放出电池的全部能量
+        elseif ess(i) >0 && ess(i)< (power_constraint * time_period)%当电池储存的能量小于PCS功率*t时间需要的能量时，放出电池的全部能量
             ess(i+1) = 0;
             %total_discharge(i+1) = total_discharge(i) + ess(i);
         elseif ess(i) == 0%当电池储存的能量为0，无动作。
@@ -45,7 +46,7 @@ for i = 1 : 600 %该电厂一天调用次数为600
         end
         %% 充电-AGC与出力差值小于储能功率的绝对值
     elseif x(i) < 0 & x(i) > -power_constraint
-        if (ess(i) - x(i)* time_period) <  energy_constraint%当电池储存的能量+下一个时段充电的能量小于能量约束，充入差值*时间的能量
+        if (ess(i) - x(i)* time_period) <  energy_constraint%当电池储存的能量+下一个时段充电的能量小于能量约束，充入差值*t时间的能量
             ess(i+1) = ess(i) - x(i) * time_period;
             %total_charge(i+1) = total_charge(i) - x(i) * time_period;
         elseif ess(i) <= energy_constraint && (ess(i) + (power_constraint * time_period)) > energy_constraint%当电池储存的能量小于能量约束，同时存储的能量+下一个时段充电的能量大于能量约束，充满
@@ -113,10 +114,19 @@ grid on;
 hold on;
 plot(POWER_OUT,'r:');
 hold on;
+% plot(POWER_REF,'c-.');
+% hold on;
 plot(BESS_OUT,'b--');
 legend('AGC指令','纯火电','火储联调','location','northwest');
 figure;
-plot(SOC,'--rs','MarkerEdgeColor','b');
+plot(SOC,'--r','MarkerEdgeColor','b');
 title('储能系统SOC情况')
 xlabel('时间0~24h(每个点间距2min24s)')
 ylabel('SOC')
+legend('SOC曲线','location','northwest');
+figure;
+plot(bess_power_act(2:601),'-.g','MarkerEdgeColor','b');
+title('储能本体实时出力')
+xlabel('时间0~24h(每个点间距2min24s)');
+ylabel('储能功率');
+legend('储能本体出力曲线','location','northwest');
